@@ -9,50 +9,53 @@ on:
 
 jobs:
   analyze:
-    name: Analyze (C/C++)
+    name: Analyze Apache httpd 2.4.49 (C/C++)
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
-      security-events: write  # required for code scanning upload
-
-    strategy:
-      fail-fast: false
+      security-events: write  # required to publish code scanning alerts
 
     steps:
-      - name: Checkout
+      # --- Get the upstream repo at the vulnerable tag ---
+      - name: Checkout Apache httpd 2.4.49
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - name: Use specific vulnerable tag
-        run: |
-          git fetch --tags
-          git checkout 2.4.49
+          repository: apache/httpd
+          ref: 2.4.49       # <-- specific tag
+          fetch-depth: 1
 
-      - name: Set up CodeQL
+      - name: Confirm tag
+        run: |
+          echo "Commit: $(git rev-parse --short HEAD)"
+          echo "Tag: 2.4.49"
+
+      # --- Initialize CodeQL (C/C++) ---
+      - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: cpp
-          # use the broader rule set:
           queries: +security-extended
 
-      # --- Custom build for C/C++ (autobuild off) ---
+      # --- Build prerequisites for httpd ---
       - name: Install build prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential autoconf libtool pkg-config \
-            libexpat1-dev libpcre2-dev curl
+            build-essential autoconf libtool libtool-bin pkg-config \
+            libexpat1-dev libpcre3-dev curl perl
 
-      - name: Bundle APR and APR-Util (for httpd)
+      # --- Bundle APR and APR-Util expected by this httpd version ---
+      - name: Bundle APR and APR-Util
         run: |
           mkdir -p srclib
-          curl -sSLO https://downloads.apache.org/apr/apr-1.7.0.tar.gz
-          curl -sSLO https://downloads.apache.org/apr/apr-util-1.6.1.tar.gz
+          curl -fsSLO https://downloads.apache.org/apr/apr-1.7.0.tar.gz
+          curl -fsSLO https://downloads.apache.org/apr/apr-util-1.6.1.tar.gz
           tar xzf apr-1.7.0.tar.gz && mv apr-1.7.0 srclib/apr
           tar xzf apr-util-1.6.1.tar.gz && mv apr-util-1.6.1 srclib/apr-util
 
-      - name: Configure & build httpd
+      # --- Configure & build (autobuild is intentionally NOT used) ---
+      - name: Build httpd
         env:
           MAKEFLAGS: -j2
         run: |
@@ -60,13 +63,14 @@ jobs:
           ./configure --with-included-apr
           make
 
+      # --- Run the CodeQL analysis and produce SARIF ---
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:cpp"
           output: codeql-results
 
-      # Optional: save SARIF as a workflow artifact too
+      # --- Save SARIF as a workflow artifact (optional but handy) ---
       - name: Upload SARIF artifact
         uses: actions/upload-artifact@v4
         with:
