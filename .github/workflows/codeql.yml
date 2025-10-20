@@ -17,13 +17,9 @@ jobs:
       security-events: write
 
     steps:
-      # Get upstream source at the vulnerable tag
-      - name: Checkout Apache httpd 2.4.49
+      # You can still checkout your repo so results attach to it
+      - name: Checkout this repo
         uses: actions/checkout@v4
-        with:
-          repository: apache/httpd
-          ref: 2.4.49
-          fetch-depth: 1
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
@@ -31,8 +27,7 @@ jobs:
           languages: cpp
           queries: +security-extended
 
-      # Use system APR/APU instead of bundling srclib/apr*
-      - name: Install build prerequisites (system APR/APU)
+      - name: Install build prerequisites (use system APR/APU)
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -40,11 +35,16 @@ jobs:
             libapr1-dev libaprutil1-dev \
             libexpat1-dev libpcre3-dev curl perl
 
-      - name: Build httpd (link against system APR/APU)
+      - name: Fetch httpd 2.4.49 release tarball
+        run: |
+          curl -fsSLO https://archive.apache.org/dist/httpd/httpd-2.4.49.tar.gz
+          tar xzf httpd-2.4.49.tar.gz
+
+      - name: Configure & build httpd (no buildconf; system APR/APU)
         env:
           MAKEFLAGS: -j2
+        working-directory: httpd-2.4.49
         run: |
-          ./buildconf
           ./configure \
             --with-apr=/usr/bin/apr-1-config \
             --with-apr-util=/usr/bin/apu-1-config
