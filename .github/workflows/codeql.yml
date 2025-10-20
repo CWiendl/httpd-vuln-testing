@@ -49,8 +49,8 @@ jobs:
       - name: Bundle APR and APR-Util
         run: |
           mkdir -p srclib
-          curl -fsSLO https://downloads.apache.org/apr/apr-1.7.0.tar.gz
-          curl -fsSLO https://downloads.apache.org/apr/apr-util-1.6.1.tar.gz
+          curl -fsSLO https://archive.apache.org/dist/apr/apr-1.7.0.tar.gz
+          curl -fsSLO https://archive.apache.org/dist/apr/apr-util-1.6.1.tar.gz
           tar xzf apr-1.7.0.tar.gz && mv apr-1.7.0 srclib/apr
           tar xzf apr-util-1.6.1.tar.gz && mv apr-util-1.6.1 srclib/apr-util
 
