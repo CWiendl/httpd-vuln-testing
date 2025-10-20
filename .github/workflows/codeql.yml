@@ -14,63 +14,48 @@ jobs:
     permissions:
       actions: read
       contents: read
-      security-events: write  # required to publish code scanning alerts
+      security-events: write
 
     steps:
-      # --- Get the upstream repo at the vulnerable tag ---
+      # Get upstream source at the vulnerable tag
       - name: Checkout Apache httpd 2.4.49
         uses: actions/checkout@v4
         with:
           repository: apache/httpd
-          ref: 2.4.49       # <-- specific tag
+          ref: 2.4.49
           fetch-depth: 1
 
-      - name: Confirm tag
-        run: |
-          echo "Commit: $(git rev-parse --short HEAD)"
-          echo "Tag: 2.4.49"
-
-      # --- Initialize CodeQL (C/C++) ---
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: cpp
           queries: +security-extended
 
-      # --- Build prerequisites for httpd ---
-      - name: Install build prerequisites
+      # Use system APR/APU instead of bundling srclib/apr*
+      - name: Install build prerequisites (system APR/APU)
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential autoconf libtool libtool-bin pkg-config \
+            libapr1-dev libaprutil1-dev \
             libexpat1-dev libpcre3-dev curl perl
 
-      # --- Bundle APR and APR-Util expected by this httpd version ---
-      - name: Bundle APR and APR-Util
-        run: |
-          mkdir -p srclib
-          curl -fsSLO https://archive.apache.org/dist/apr/apr-1.7.0.tar.gz
-          curl -fsSLO https://archive.apache.org/dist/apr/apr-util-1.6.1.tar.gz
-          tar xzf apr-1.7.0.tar.gz && mv apr-1.7.0 srclib/apr
-          tar xzf apr-util-1.6.1.tar.gz && mv apr-util-1.6.1 srclib/apr-util
-
-      # --- Configure & build (autobuild is intentionally NOT used) ---
-      - name: Build httpd
+      - name: Build httpd (link against system APR/APU)
         env:
           MAKEFLAGS: -j2
         run: |
           ./buildconf
-          ./configure --with-included-apr
+          ./configure \
+            --with-apr=/usr/bin/apr-1-config \
+            --with-apr-util=/usr/bin/apu-1-config
           make
 
-      # --- Run the CodeQL analysis and produce SARIF ---
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:cpp"
           output: codeql-results
 
-      # --- Save SARIF as a workflow artifact (optional but handy) ---
       - name: Upload SARIF artifact
         uses: actions/upload-artifact@v4
         with:
