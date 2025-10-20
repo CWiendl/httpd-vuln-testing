@@ -1,0 +1,74 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze (C/C++)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write  # required for code scanning upload
+
+    strategy:
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Use specific vulnerable tag
+        run: |
+          git fetch --tags
+          git checkout 2.4.49
+
+      - name: Set up CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: cpp
+          # use the broader rule set:
+          queries: +security-extended
+
+      # --- Custom build for C/C++ (autobuild off) ---
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential autoconf libtool pkg-config \
+            libexpat1-dev libpcre2-dev curl
+
+      - name: Bundle APR and APR-Util (for httpd)
+        run: |
+          mkdir -p srclib
+          curl -sSLO https://downloads.apache.org/apr/apr-1.7.0.tar.gz
+          curl -sSLO https://downloads.apache.org/apr/apr-util-1.6.1.tar.gz
+          tar xzf apr-1.7.0.tar.gz && mv apr-1.7.0 srclib/apr
+          tar xzf apr-util-1.6.1.tar.gz && mv apr-util-1.6.1 srclib/apr-util
+
+      - name: Configure & build httpd
+        env:
+          MAKEFLAGS: -j2
+        run: |
+          ./buildconf
+          ./configure --with-included-apr
+          make
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:cpp"
+          output: codeql-results
+
+      # Optional: save SARIF as a workflow artifact too
+      - name: Upload SARIF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif
+          path: codeql-results
